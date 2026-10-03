@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fusion · Analysis board</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#0c1220;color:#e6edf8}*{box-sizing:border-box}body{margin:0}main{max-width:1050px;margin:36px auto;padding:0 24px}h1{font-size:32px;margin:6px 0}p{color:#a7b6cc;line-height:1.6}.eyebrow{color:#79d8c6;letter-spacing:3px;font-size:12px} .layout{display:grid;grid-template-columns:360px 1fr;gap:28px;margin-top:28px}.panel{background:#151f31;border:1px solid #29364d;border-radius:16px;padding:24px}#board{display:grid;grid-template-columns:repeat(10,1fr);gap:2px;touch-action:none;user-select:none;background:#070d17;padding:6px;border-radius:8px}.cell{padding:0;aspect-ratio:1;border:0;border-radius:2px;background:#1e2b40;min-width:0;cursor:crosshair}.cell.filled{background:#95a7c2;box-shadow:inset 0 2px #c4cfde}.cell.suggested{background:#38d9bf;box-shadow:inset 0 0 0 2px #c1fff0}.cell:focus-visible{outline:2px solid white}label{display:block;margin:16px 0 6px;color:#b9c8dc;font-size:14px}input,select{width:100%;padding:11px;background:#0c1423;border:1px solid #3b4b63;border-radius:8px;color:#fff;font:inherit}.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}.stats{grid-template-columns:repeat(3,1fr)}button.action{padding:11px 16px;border:1px solid #40516e;border-radius:8px;background:#23334d;color:#fff;font:inherit;cursor:pointer}button.primary{background:#56dfc4;color:#07231e;font-weight:700;border:0}button:disabled{opacity:.45;cursor:default}.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}#result{border-top:1px solid #32415b;margin-top:24px;padding-top:18px;line-height:1.6}#status{min-height:26px}small{color:#9dafc8}.legend{display:flex;gap:16px;font-size:12px;margin-top:12px}.dot{display:inline-block;width:10px;height:10px;background:#95a7c2;margin-right:5px}.dot.green{background:#38d9bf} @media(max-width:760px){main{margin:20px auto}.layout{grid-template-columns:1fr}.board-panel{max-width:360px;width:100%;margin:auto}}
+</style>
+<main><div class="eyebrow">FUSION / LOCAL COACHING</div><h1>Explore your next move.</h1><p>Build a position, choose the pieces, and ask Fusion for a recommended placement.</p>
+<div class="layout"><section class="panel board-panel"><div id="board" aria-label="Editable 10 by 20 stack"></div><div class="legend"><span><i class="dot"></i>Your stack</span><span><i class="dot green"></i>Recommendation</span></div><p><small>Click or drag to draw. Start on a filled cell to erase. Right-drag also erases. Only settled blocks belong here.</small></p><div class="actions"><button class="action" id="clear">Clear stack</button><button class="action" id="example">Load example</button></div></section>
+<section class="panel"><div class="row"><div><label for="current">Current piece</label><select id="current"></select></div><div><label for="hold">Hold</label><select id="hold"><option value="">Empty</option></select></div></div>
+<label for="queue">Next queue · first piece on the left</label><input id="queue" value="T O S Z J L I" spellcheck="false" autocomplete="off"><small>Use I O T S Z J L, separated by spaces or commas. Up to 32 pieces.</small>
+<div class="row stats"><div><label for="combo">Combo</label><input id="combo" type="number" min="0" max="100" value="0"></div><div><label for="b2b">Back-to-back</label><input id="b2b" type="number" min="0" max="255" value="0"></div><div><label for="pending">Pending garbage</label><input id="pending" type="number" min="0" max="255" value="0"></div></div>
+<div class="actions"><button class="action primary" id="analyze">Analyze position</button><button class="action" id="apply" disabled>Apply recommendation</button><button class="action" id="undo" disabled>Undo</button></div>
+<p id="status" role="status" aria-live="polite">Ready. Draw a stack or load the example.</p><div id="result">Your recommendation will appear here.</div><p><small>Local Fusion search · up to 8 pieces ahead · no account or model download. Advice uses the supplied queue; it is a position analysis, not a simulation of a timed opponent.</small></p></section></div></main>
+<script>
+const $=id=>document.getElementById(id), letters=['I','O','T','S','Z','J','L'];
+for(const id of ['current','hold'])for(const p of letters)$(id).add(new Option(p,p));
+let rows=Array(40).fill(0), recommendation=null, history=[], drawing=false, paint=true, busy=false;
+const cells=[];
+for(let y=19;y>=0;y--)for(let x=0;x<10;x++){const b=document.createElement('button');b.className='cell';b.type='button';b.dataset.x=x;b.dataset.y=y;b.setAttribute('aria-label',`Column ${x+1}, row ${y+1}`);$('board').append(b);cells.push(b);}
+function render(){const marks=new Set((recommendation?.cells||[]).map(c=>c.join(',')));for(const c of cells){const x=+c.dataset.x,y=+c.dataset.y;const filled=!!(rows[y]&(1<<x));c.classList.toggle('filled',filled);c.classList.toggle('suggested',marks.has(x+','+y));c.setAttribute('aria-pressed',filled);}$('apply').disabled=busy||!recommendation;$('undo').disabled=busy||!history.length;}
+function snapshot(){return {rows:[...rows],...Object.fromEntries(['current','hold','queue','combo','b2b','pending'].map(k=>[k,$(k).value]))};}
+function save(){history.push(snapshot());if(history.length>100)history.shift();}
+function invalidate(){recommendation=null;$('result').textContent='Your recommendation will appear here.';$('status').textContent='Position changed. Analyze to update the recommendation.';render();}
+function edit(c){if(busy||!c?.classList.contains('cell'))return;const x=+c.dataset.x,y=+c.dataset.y;rows[y]=paint?rows[y]|(1<<x):rows[y]&~(1<<x);invalidate();}
+$('board').addEventListener('contextmenu',e=>e.preventDefault());
+$('board').addEventListener('pointerdown',e=>{if(busy||!e.target.classList.contains('cell'))return;e.preventDefault();save();drawing=true;paint=e.button!==2&&!(rows[+e.target.dataset.y]&(1<<+e.target.dataset.x));edit(e.target);});
+document.addEventListener('pointermove',e=>{if(drawing){e.preventDefault();edit(document.elementFromPoint(e.clientX,e.clientY));}});
+document.addEventListener('pointerup',()=>drawing=false);window.addEventListener('blur',()=>drawing=false);
+$('board').addEventListener('keydown',e=>{if(busy||![' ','Enter'].includes(e.key))return;e.preventDefault();save();paint=!(rows[+e.target.dataset.y]&(1<<+e.target.dataset.x));edit(e.target);});
+for(const id of ['current','hold','queue','combo','b2b','pending'])$(id).addEventListener('input',invalidate);
+$('clear').onclick=()=>{save();rows.fill(0);invalidate();};
+$('example').onclick=()=>{save();rows.fill(0);for(let y=0;y<4;y++)rows[y]=1023^(1<<4);$('current').value='I';$('hold').value='';$('queue').value='T O S Z J L I';for(const k of ['combo','b2b','pending'])$(k).value=0;invalidate();};
+$('undo').onclick=()=>{const s=history.pop();if(!s)return;rows=s.rows;for(const k of ['current','hold','queue','combo','b2b','pending'])$(k).value=s[k];invalidate();};
+function setBusy(v){busy=v;for(const el of document.querySelectorAll('input,select,button.action'))el.disabled=v;render();}
+$('analyze').onclick=async()=>{
+ try{
+ const raw=$('queue').value.toUpperCase().replace(/[\s,]+/g,'');if(!/^[IOTSZJL]{1,32}$/.test(raw))throw Error('Enter 1–32 queue pieces using I O T S Z J L.');
+ const payload={rows:[...rows],current:$('current').value,hold:$('hold').value||null,queue:[...raw]};
+ for(const k of ['combo','b2b','pending']){const v=Number($(k).value);if(!Number.isInteger(v)||v<0||v>(k==='combo'?100:255))throw Error('Check combo, back-to-back, and garbage values.');payload[k]=v;}
+ recommendation=null;setBusy(true);$('status').textContent='Fusion is analyzing…';$('result').textContent='';
+ const response=await fetch('/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),r=await response.json();if(!response.ok)throw Error(r.error||'Analysis failed.');
+ recommendation=r;$('status').textContent='Analysis complete. The green cells show the recommended placement.';
+ $('result').textContent=`${r.hold_used?'Use hold, then place':'Place'} ${r.piece}. Clears ${r.lines} line(s). Search score: ${r.score.toFixed(2)}. Continuation pieces: ${r.path.join(' → ')}.`;
+ if(r.cells.some(c=>c[1]>=20))$('status').textContent+=' Some recommended cells are above the visible board.';
+ }catch(e){recommendation=null;$('status').textContent=e.message;}finally{setBusy(false);}
+};
+$('apply').onclick=()=>{if(!recommendation)return;save();const r=recommendation;rows=r.after;$('current').value=r.next||'I';$('queue').value=r.queue.join(' ');$('hold').value=r.hold||'';for(const k of ['combo','b2b','pending'])$(k).value=r[k];invalidate();if(!r.next)$('status').textContent='Queue exhausted. Choose the current piece and enter the next queue.';};
+render();
+</script></html>
